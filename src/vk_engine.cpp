@@ -55,38 +55,19 @@ void VulkanEngine::Init()
 
 void VulkanEngine::Cleanup()
 {
-	if (isInitialized)
-	{
-		// Make sure the gpu has stopped doing its things
-		vkDeviceWaitIdle(device);
+	if (!isInitialized) return;
 
-		vkDestroyCommandPool(device, commandPool, nullptr);
+	// Make sure the gpu has stopped doing its things
+	vkWaitForFences(device, 1, &renderFence, true, 1'000'000'000);
 
-		// Destroy sync objects
-		vkDestroyFence(device, renderFence, nullptr);
-		vkDestroySemaphore(device, renderSemaphore, nullptr);
-		vkDestroySemaphore(device, presentSemaphore, nullptr);
+	_mainDeletionQueue.Flush();
 
-		vkDestroySwapchainKHR(device, swapchain, nullptr);
+	vkDestroySurfaceKHR(instance, surface, nullptr);
 
-		// Destroy the main renderpass
-		vkDestroyRenderPass(device, renderPass, nullptr);
+	vkDestroyDevice(device, nullptr);
+	vkDestroyInstance(instance, nullptr);
 
-		// Destroy swapchain resources
-		for (std::size_t i = 0; i < swapchainImageViews.size(); i++)
-		{
-			vkDestroyFramebuffer(device, framebuffers[i], nullptr);
-			vkDestroyImageView(device, swapchainImageViews[i], nullptr);
-		}
-
-		vkDestroySurfaceKHR(instance, surface, nullptr);
-
-		vkDestroyDevice(device, nullptr);
-		vkb::destroy_debug_utils_messenger(instance, debugMessenger);
-		vkDestroyInstance(instance, nullptr);
-
-		SDL_DestroyWindow(window);
-	}
+	SDL_DestroyWindow(window);
 }
 
 void VulkanEngine::Draw()
@@ -115,7 +96,7 @@ void VulkanEngine::Draw()
 	VkClearValue clearValue;
 	const auto floatFrameNumber = static_cast<float>(frameNumber);
 	const float flash = std::abs(std::sin(floatFrameNumber / 120.0f));
-	clearValue.color = { {0.0f, 0.0f, flash, 1.0f} };
+	clearValue.color = {{0.0f, 0.0f, flash, 1.0f}};
 
 	// Start the main render pass.
 	// We will use the clear color from above, and the framebuffer of the index the swapchain gave us
@@ -225,10 +206,10 @@ void VulkanEngine::InitVulkan()
 	vkb::InstanceBuilder builder;
 
 	auto instanceRet = builder.set_app_name("Example Vulkan Application")
-		.request_validation_layers(true)
-		.require_api_version(1, 1, 0)
-		.use_default_debug_messenger()
-		.build();
+	                          .request_validation_layers(true)
+	                          .require_api_version(1, 1, 0)
+	                          .use_default_debug_messenger()
+	                          .build();
 
 	const vkb::Instance vkbInstance = instanceRet.value();
 
@@ -243,15 +224,15 @@ void VulkanEngine::InitVulkan()
 
 	// Use VkBootstrap to select a GPU
 	// We want a GPU that can write to the SDL surface and supports Vulkan 1.1
-	vkb::PhysicalDeviceSelector selector{ vkbInstance };
+	vkb::PhysicalDeviceSelector selector{vkbInstance};
 	vkb::PhysicalDevice physicalDevice = selector
-		.set_minimum_version(1, 1)
-		.set_surface(surface)
-		.select()
-		.value();
+	                                     .set_minimum_version(1, 1)
+	                                     .set_surface(surface)
+	                                     .select()
+	                                     .value();
 
 	// Create the final Vulkan device
-	vkb::DeviceBuilder deviceBuilder{ physicalDevice };
+	vkb::DeviceBuilder deviceBuilder{physicalDevice};
 	// ReSharper disable once CppUseStructuredBinding
 	vkb::Device vkbDevice = deviceBuilder.build().value();
 
@@ -266,20 +247,25 @@ void VulkanEngine::InitVulkan()
 
 void VulkanEngine::InitSwapchain()
 {
-	vkb::SwapchainBuilder swapchainBuilder{ chosenGpu, device, surface };
+	vkb::SwapchainBuilder swapchainBuilder{chosenGpu, device, surface};
 
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
-		.use_default_format_selection()
-		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-		.set_desired_extent(windowExtent.width, windowExtent.height)
-		.build()
-		.value();
+	                              .use_default_format_selection()
+	                              .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+	                              .set_desired_extent(windowExtent.width, windowExtent.height)
+	                              .build()
+	                              .value();
 
 	// Store swapchain and its related images
 	swapchain = vkbSwapchain.swapchain;
 	swapchainImages = vkbSwapchain.get_images().value();
 	swapchainImageViews = vkbSwapchain.get_image_views().value();
 	swapchainImageFormat = vkbSwapchain.image_format;
+
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		vkDestroySwapchainKHR(device, swapchain, nullptr);
+	});
 }
 
 void VulkanEngine::InitCommands()
@@ -295,6 +281,11 @@ void VulkanEngine::InitCommands()
 	const VkCommandBufferAllocateInfo commandAllocateInfo = vkinit::CommandBufferAllocateInfo(commandPool, 1);
 
 	VK_CHECK(vkAllocateCommandBuffers(device, &commandAllocateInfo, &mainCommandBuffer));
+
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		vkDestroyCommandPool(device, commandPool, nullptr);
+	});
 }
 
 void VulkanEngine::InitDefaultRenderpass()
@@ -348,6 +339,11 @@ void VulkanEngine::InitDefaultRenderpass()
 	renderPassInfo.pSubpasses = &subpass;
 
 	VK_CHECK(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
+
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		vkDestroyRenderPass(device, renderPass, nullptr);
+	});
 }
 
 void VulkanEngine::InitFramebuffers()
@@ -366,6 +362,12 @@ void VulkanEngine::InitFramebuffers()
 	{
 		framebufferInfo.pAttachments = &swapchainImageViews[i];
 		VK_CHECK(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffers[i]));
+
+		_mainDeletionQueue.PushFunction([this, i]()
+		{
+			vkDestroyFramebuffer(device, framebuffers[i], nullptr);
+			vkDestroyImageView(device, swapchainImageViews[i], nullptr);
+		});
 	}
 }
 
@@ -376,11 +378,22 @@ void VulkanEngine::InitSyncStructures()
 
 	VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &renderFence));
 
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		vkDestroyFence(device, renderFence, nullptr);
+	});
+
 	// For the semaphores we don't need any flags
 	const VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::SemaphoreCreateInfo();
 
 	VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &presentSemaphore));
 	VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderSemaphore));
+
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		vkDestroySemaphore(device, presentSemaphore, nullptr);
+		vkDestroySemaphore(device, renderSemaphore, nullptr);
+	});
 }
 
 void VulkanEngine::InitPipelines()
@@ -456,7 +469,7 @@ void VulkanEngine::InitPipelines()
 	pipelineBuilder.viewport.minDepth = 0.0f;
 	pipelineBuilder.viewport.maxDepth = 1.0f;
 
-	pipelineBuilder.scissor.offset = { 0, 0 };
+	pipelineBuilder.scissor.offset = {0, 0};
 	pipelineBuilder.scissor.extent = windowExtent;
 
 	// Configure the rasterizer to draw filled triangles
@@ -484,6 +497,20 @@ void VulkanEngine::InitPipelines()
 		vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, redTriangleFragShader));
 
 	redTrianglePipeline = pipelineBuilder.BuildPipeline(device, renderPass);
+
+	vkDestroyShaderModule(device, redTriangleVertexShader, nullptr);
+	vkDestroyShaderModule(device, redTriangleFragShader, nullptr);
+	vkDestroyShaderModule(device, triangleFragShader, nullptr);
+	vkDestroyShaderModule(device, triangleVertexShader, nullptr);
+
+	_mainDeletionQueue.PushFunction([this]()
+	{
+		// Destroy the 2 pipelines we have created
+		vkDestroyPipeline(device, redTrianglePipeline, nullptr);
+		vkDestroyPipeline(device, trianglePipeline, nullptr);
+
+		vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
+	});
 }
 
 bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule)

@@ -3,18 +3,42 @@
 
 #pragma once
 
+#include <deque>
+#include <functional>
+#include <ranges>
 #include <vector>
 #include <vk_types.h>
 
-class VulkanEngine {
+struct DeletionQueue
+{
+	std::deque<std::function<void()>> deletors;
+
+	void PushFunction(std::function<void()>&& function)
+	{
+		deletors.push_back(function);
+	}
+
+	void Flush()
+	{
+		// Reverse iterate the deletion queue to execute all the functions
+		for (auto& deletor : std::ranges::reverse_view(deletors))
+		{
+			deletor();
+		}
+
+		deletors.clear();
+	}
+};
+
+class VulkanEngine
+{
 public:
+	bool isInitialized{false};
+	int frameNumber{0};
 
-	bool isInitialized{ false };
-	int frameNumber{ 0 };
+	VkExtent2D windowExtent{1700, 900};
 
-	VkExtent2D windowExtent{ 1700 , 900 };
-
-	struct SDL_Window* window{ nullptr };
+	struct SDL_Window* window{nullptr};
 
 	VkInstance instance{};
 	VkDebugUtilsMessengerEXT debugMessenger{};
@@ -58,7 +82,8 @@ public:
 	void Run();
 
 private:
-	int _selectedShader{ 0 };
+	int _selectedShader{0};
+	DeletionQueue _mainDeletionQueue;
 
 	void InitVulkan();
 	void InitSwapchain();
