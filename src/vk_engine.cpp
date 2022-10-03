@@ -368,7 +368,7 @@ void VulkanEngine::InitSyncStructures()
 void VulkanEngine::InitPipelines()
 {
 	VkShaderModule triangleFragShader;
-	if (!LoadShaderModule("../../shaders/triangle.frag.spv", &triangleFragShader))
+	if (!LoadShaderModule("../../shaders/colored_triangle.frag.spv", &triangleFragShader))
 	{
 		std::cerr << "Error when building the triangle fragment shader module\n";
 	}
@@ -378,7 +378,7 @@ void VulkanEngine::InitPipelines()
 	}
 
 	VkShaderModule triangleVertexShader;
-	if (!LoadShaderModule("../../shaders/triangle.vert.spv", &triangleVertexShader))
+	if (!LoadShaderModule("../../shaders/colored_triangle.vert.spv", &triangleVertexShader))
 	{
 		std::cerr << "Error when building the triangle vertex shader module\n";
 	}
@@ -453,7 +453,7 @@ bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outSha
 	file.seekg(0);
 
 	// Load file in buffer
-	file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
+	file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(fileSize));
 
 	// Now that the file is loaded into the buffer, we can close it
 	file.close();
