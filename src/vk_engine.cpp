@@ -18,10 +18,10 @@
 		VkResult err = x;													\
 		if (err)															\
 		{																	\
-			std::cout << "Detected Vulkan error : " << err << std::endl;	\
+			std::cerr << "Detected Vulkan error : " << err << std::endl;	\
 			abort();														\
 		}																	\
-	} while (0)																\
+	} while (0)
 
 void VulkanEngine::Init()
 {
@@ -30,9 +30,9 @@ void VulkanEngine::Init()
 
 	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN;
 
-	const int width = static_cast<int>(_windowExtent.width);
-	const int height = static_cast<int>(_windowExtent.height);
-	_window = SDL_CreateWindow(
+	const int width = static_cast<int>(windowExtent.width);
+	const int height = static_cast<int>(windowExtent.height);
+	window = SDL_CreateWindow(
 		"Vulkan Engine",
 		SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED,
@@ -50,79 +50,86 @@ void VulkanEngine::Init()
 	InitPipelines();
 
 	//everything went fine
-	_isInitialized = true;
+	isInitialized = true;
 }
 
 void VulkanEngine::Cleanup()
 {
-	if (_isInitialized) {
+	if (isInitialized)
+	{
 		// Make sure the gpu has stopped doing its things
-		vkDeviceWaitIdle(_device);
+		vkDeviceWaitIdle(device);
 
-		vkDestroyCommandPool(_device, _commandPool, nullptr);
+		vkDestroyCommandPool(device, commandPool, nullptr);
 
 		// Destroy sync objects
-		vkDestroyFence(_device, _renderFence, nullptr);
-		vkDestroySemaphore(_device, _renderSemaphore, nullptr);
-		vkDestroySemaphore(_device, _presentSemaphore, nullptr);
+		vkDestroyFence(device, renderFence, nullptr);
+		vkDestroySemaphore(device, renderSemaphore, nullptr);
+		vkDestroySemaphore(device, presentSemaphore, nullptr);
 
-		vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+		vkDestroySwapchainKHR(device, swapchain, nullptr);
 
 		// Destroy the main renderpass
-		vkDestroyRenderPass(_device, _renderPass, nullptr);
+		vkDestroyRenderPass(device, renderPass, nullptr);
 
 		// Destroy swapchain resources
-		for (std::size_t i = 0; i < _swapchainImageViews.size(); i++)
+		for (std::size_t i = 0; i < swapchainImageViews.size(); i++)
 		{
-			vkDestroyFramebuffer(_device, _framebuffers[i], nullptr);
-			vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
+			vkDestroyFramebuffer(device, framebuffers[i], nullptr);
+			vkDestroyImageView(device, swapchainImageViews[i], nullptr);
 		}
 
-		vkDestroySurfaceKHR(_instance, _surface, nullptr);
+		vkDestroySurfaceKHR(instance, surface, nullptr);
 
-		vkDestroyDevice(_device, nullptr);
-		vkb::destroy_debug_utils_messenger(_instance, _debugMessenger);
-		vkDestroyInstance(_instance, nullptr);
+		vkDestroyDevice(device, nullptr);
+		vkb::destroy_debug_utils_messenger(instance, debugMessenger);
+		vkDestroyInstance(instance, nullptr);
 
-		SDL_DestroyWindow(_window);
+		SDL_DestroyWindow(window);
 	}
 }
 
 void VulkanEngine::Draw()
 {
 	// Wait until the GPU has finished rendering the last frame with a timeout of 1 second
-	VK_CHECK(vkWaitForFences(_device, 1, &_renderFence, true, 1'000'000'000));
-	VK_CHECK(vkResetFences(_device, 1, &_renderFence));
+	VK_CHECK(vkWaitForFences(device, 1, &renderFence, true, 1'000'000'000));
+	VK_CHECK(vkResetFences(device, 1, &renderFence));
 
 	// Request image from the swapchain, one second timeout
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1'000'000'000, _presentSemaphore, nullptr, &swapchainImageIndex));
+	VK_CHECK(
+		vkAcquireNextImageKHR(device, swapchain, 1'000'000'000, presentSemaphore, nullptr, &swapchainImageIndex));
 
 	// Now that we are sure that the command finished executing, we can safely reset the command buffer to begin recording again
-	VK_CHECK(vkResetCommandBuffer(_mainCommandBuffer, 0));
+	VK_CHECK(vkResetCommandBuffer(mainCommandBuffer, 0));
 
-	const VkCommandBuffer commandBuffer = _mainCommandBuffer;
+	const VkCommandBuffer commandBuffer = mainCommandBuffer;
 
 	// Begin the command buffer recording. We will use this command buffer exactly once, so we want to let Vulkan know that
-	const VkCommandBufferBeginInfo beginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	const VkCommandBufferBeginInfo beginInfo = vkinit::CommandBufferBeginInfo(
+		VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
 	// Make a clear color form frame number. This will flash with a 120 * pi frame period
 	VkClearValue clearValue;
-	const auto frameNumber = static_cast<float>(_frameNumber);
-	const float flash = std::abs(std::sin(frameNumber / 120.0f));
-	clearValue.color = { {0.0f, 0.0f, flash, 1.0f} };
+	const auto floatFrameNumber = static_cast<float>(frameNumber);
+	const float flash = std::abs(std::sin(floatFrameNumber / 120.0f));
+	clearValue.color = {{0.0f, 0.0f, flash, 1.0f}};
 
 	// Start the main render pass.
 	// We will use the clear color from above, and the framebuffer of the index the swapchain gave us
-	VkRenderPassBeginInfo renderPassBeginInfo = vkinit::RenderPassBeginInfo(_renderPass, _windowExtent, _framebuffers[swapchainImageIndex]);
+	VkRenderPassBeginInfo renderPassBeginInfo = vkinit::RenderPassBeginInfo(
+		renderPass, windowExtent, framebuffers[swapchainImageIndex]);
 
 	// Connect clear values
 	renderPassBeginInfo.clearValueCount = 1;
 	renderPassBeginInfo.pClearValues = &clearValue;
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 	// Finalize the render pass
 	vkCmdEndRenderPass(commandBuffer);
@@ -137,31 +144,31 @@ void VulkanEngine::Draw()
 	VkSubmitInfo submit = vkinit::SubmitInfo(&commandBuffer);
 	submit.pWaitDstStageMask = &waitStage;
 	submit.waitSemaphoreCount = 1;
-	submit.pWaitSemaphores = &_presentSemaphore;
+	submit.pWaitSemaphores = &presentSemaphore;
 	submit.signalSemaphoreCount = 1;
-	submit.pSignalSemaphores = &_renderSemaphore;
+	submit.pSignalSemaphores = &renderSemaphore;
 
 	// Submit command buffer to the queue and execute it
 	// _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit, _renderFence));
+	VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submit, renderFence));
 
 	// This will put the image we just rendered into the visible window
 	// We want to wait on the _renderSemaphore for that,
 	// as it's necessary that drawing command have finished before the image is displayed
 	VkPresentInfoKHR presentInfo = vkinit::PresentInfo();
 
-	presentInfo.pSwapchains = &_swapchain;
+	presentInfo.pSwapchains = &swapchain;
 	presentInfo.swapchainCount = 1;
 
-	presentInfo.pWaitSemaphores = &_renderSemaphore;
+	presentInfo.pWaitSemaphores = &renderSemaphore;
 	presentInfo.waitSemaphoreCount = 1;
 
 	presentInfo.pImageIndices = &swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
+	VK_CHECK(vkQueuePresentKHR(graphicsQueue, &presentInfo));
 
 	// Increase the number of frames drawn
-	_frameNumber++;
+	frameNumber++;
 }
 
 void VulkanEngine::Run()
@@ -177,12 +184,15 @@ void VulkanEngine::Run()
 		{
 			//close the window when user alt-f4s or clicks the X button			
 			if (e.type == SDL_QUIT) bQuit = true;
-			if (e.type == SDL_EventType::SDL_KEYDOWN) {
-				const Uint8* state = SDL_GetKeyboardState(NULL);
-				if (state[SDL_SCANCODE_RETURN]) {
+			if (e.type == SDL_KEYDOWN)
+			{
+				const Uint8* state = SDL_GetKeyboardState(nullptr);
+				if (state[SDL_SCANCODE_RETURN])
+				{
 					std::cout << "<RETURN> is pressed.\n";
 				}
-				if (state[SDL_SCANCODE_RIGHT] && state[SDL_SCANCODE_UP]) {
+				if (state[SDL_SCANCODE_RIGHT] && state[SDL_SCANCODE_UP])
+				{
 					std::cout << "Right and Up Keys Pressed.\n";
 				}
 			}
@@ -197,75 +207,76 @@ void VulkanEngine::InitVulkan()
 	vkb::InstanceBuilder builder;
 
 	auto instanceRet = builder.set_app_name("Example Vulkan Application")
-		.request_validation_layers(true)
-		.require_api_version(1, 1, 0)
-		.use_default_debug_messenger()
-		.build();
+	                          .request_validation_layers(true)
+	                          .require_api_version(1, 1, 0)
+	                          .use_default_debug_messenger()
+	                          .build();
 
 	const vkb::Instance vkbInstance = instanceRet.value();
 
 	// Store the instance
-	_instance = vkbInstance.instance;
+	instance = vkbInstance.instance;
 
 	// Store the debug messenger
-	_debugMessenger = vkbInstance.debug_messenger;
+	debugMessenger = vkbInstance.debug_messenger;
 
 	// Get the surface of the window we opened with SDL
-	SDL_Vulkan_CreateSurface(_window, _instance, &_surface);
+	SDL_Vulkan_CreateSurface(window, instance, &surface);
 
 	// Use VkBootstrap to select a GPU
 	// We want a GPU that can write to the SDL surface and supports Vulkan 1.1
-	vkb::PhysicalDeviceSelector selector{ vkbInstance };
+	vkb::PhysicalDeviceSelector selector{vkbInstance};
 	vkb::PhysicalDevice physicalDevice = selector
-		.set_minimum_version(1, 1)
-		.set_surface(_surface)
-		.select()
-		.value();
+	                                     .set_minimum_version(1, 1)
+	                                     .set_surface(surface)
+	                                     .select()
+	                                     .value();
 
 	// Create the final Vulkan device
-	vkb::DeviceBuilder deviceBuilder{ physicalDevice };
+	vkb::DeviceBuilder deviceBuilder{physicalDevice};
 	// ReSharper disable once CppUseStructuredBinding
 	vkb::Device vkbDevice = deviceBuilder.build().value();
 
 	// Get the VkDevice handle used in the rest of a Vulkan application
-	_device = vkbDevice.device;
-	_chosenGpu = physicalDevice.physical_device;
+	device = vkbDevice.device;
+	chosenGpu = physicalDevice.physical_device;
 
 	// Use VkBootstrap to get a Graphics queue
-	_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+	graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+	graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 }
 
 void VulkanEngine::InitSwapchain()
 {
-	vkb::SwapchainBuilder swapchainBuilder{ _chosenGpu, _device, _surface };
+	vkb::SwapchainBuilder swapchainBuilder{chosenGpu, device, surface};
 
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
-		.use_default_format_selection()
-		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-		.set_desired_extent(_windowExtent.width, _windowExtent.height)
-		.build()
-		.value();
+	                              .use_default_format_selection()
+	                              .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+	                              .set_desired_extent(windowExtent.width, windowExtent.height)
+	                              .build()
+	                              .value();
 
 	// Store swapchain and its related images
-	_swapchain = vkbSwapchain.swapchain;
-	_swapchainImages = vkbSwapchain.get_images().value();
-	_swapchainImageViews = vkbSwapchain.get_image_views().value();
-	_swapchainImageFormat = vkbSwapchain.image_format;
+	swapchain = vkbSwapchain.swapchain;
+	swapchainImages = vkbSwapchain.get_images().value();
+	swapchainImageViews = vkbSwapchain.get_image_views().value();
+	swapchainImageFormat = vkbSwapchain.image_format;
 }
 
 void VulkanEngine::InitCommands()
 {
 	// Create a command pool for commands submitted to the graphics queue
 	// We also want the pool to allow for resetting of individual command buffers
-	const VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	const VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(
+		graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_commandPool));
+	VK_CHECK(vkCreateCommandPool(device, &commandPoolInfo, nullptr, &commandPool));
 
 	// Allocate the default command buffer that we will use for rendering
-	const VkCommandBufferAllocateInfo commandAllocateInfo = vkinit::CommandBufferAllocateInfo(_commandPool, 1);
+	const VkCommandBufferAllocateInfo commandAllocateInfo = vkinit::CommandBufferAllocateInfo(commandPool, 1);
 
-	VK_CHECK(vkAllocateCommandBuffers(_device, &commandAllocateInfo, &_mainCommandBuffer));
+	VK_CHECK(vkAllocateCommandBuffers(device, &commandAllocateInfo, &mainCommandBuffer));
 }
 
 void VulkanEngine::InitDefaultRenderpass()
@@ -274,7 +285,7 @@ void VulkanEngine::InitDefaultRenderpass()
 	VkAttachmentDescription colorAttachment{};
 
 	// The attachment will have the format needed by the swapchain
-	colorAttachment.format = _swapchainImageFormat;
+	colorAttachment.format = swapchainImageFormat;
 
 	// 1 sample, we won't be doing MSAA
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -318,25 +329,25 @@ void VulkanEngine::InitDefaultRenderpass()
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
 
-	VK_CHECK(vkCreateRenderPass(_device, &renderPassInfo, nullptr, &_renderPass));
+	VK_CHECK(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
 }
 
 void VulkanEngine::InitFramebuffers()
 {
 	// Create the framebuffers for the swapchain images
 	// This will connect the render-pass to the images for rendering
-	VkFramebufferCreateInfo framebufferInfo = vkinit::FramebufferCreateInfo(_renderPass, _windowExtent);
+	VkFramebufferCreateInfo framebufferInfo = vkinit::FramebufferCreateInfo(renderPass, windowExtent);
 
 	// Grab how many images we have in the swapchain
-	const std::size_t swapchainImageCount = _swapchainImages.size();
-	_framebuffers = std::vector<VkFramebuffer>(swapchainImageCount);
+	const std::size_t swapchainImageCount = swapchainImages.size();
+	framebuffers = std::vector<VkFramebuffer>(swapchainImageCount);
 
 	// Create framebuffers for each of the swapchain image views
 
 	for (std::size_t i = 0; i < swapchainImageCount; ++i)
 	{
-		framebufferInfo.pAttachments = &_swapchainImageViews[i];
-		VK_CHECK(vkCreateFramebuffer(_device, &framebufferInfo, nullptr, &_framebuffers[i]));
+		framebufferInfo.pAttachments = &swapchainImageViews[i];
+		VK_CHECK(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffers[i]));
 	}
 }
 
@@ -345,34 +356,83 @@ void VulkanEngine::InitSyncStructures()
 	// Create synchronization structures
 	const VkFenceCreateInfo fenceCreateInfo = vkinit::FenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 
-	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_renderFence));
+	VK_CHECK(vkCreateFence(device, &fenceCreateInfo, nullptr, &renderFence));
 
 	// For the semaphores we don't need any flags
 	const VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::SemaphoreCreateInfo();
 
-	VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_presentSemaphore));
-	VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_renderSemaphore));
+	VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &presentSemaphore));
+	VK_CHECK(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderSemaphore));
 }
 
 void VulkanEngine::InitPipelines()
 {
 	VkShaderModule triangleFragShader;
-	if(!LoadShaderModule("../../shaders/triangle.frag.spv", &triangleFragShader))
+	if (!LoadShaderModule("../../shaders/triangle.frag.spv", &triangleFragShader))
 	{
-		std::cout << "Error when building the triangle fragment shader module\n";
-	} else
+		std::cerr << "Error when building the triangle fragment shader module\n";
+	}
+	else
 	{
 		std::cout << "Triangle fragment shader successfully loaded\n";
 	}
 
 	VkShaderModule triangleVertexShader;
-	if(!LoadShaderModule("../../shaders/triangle.vert.spv", &triangleVertexShader))
+	if (!LoadShaderModule("../../shaders/triangle.vert.spv", &triangleVertexShader))
 	{
-		std::cout << "Error when building the triangle vertex shader module\n";
-	} else
+		std::cerr << "Error when building the triangle vertex shader module\n";
+	}
+	else
 	{
 		std::cout << "Triangle vertex shader successfully loaded\n";
 	}
+
+	// Build the pipeline layout that controls the inputs/outputs of the shader
+	// We are not using descriptor or sets or other systems yet, so no need to use anything other than empty default
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
+
+	VK_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &trianglePipelineLayout));
+
+	// Build the stage-create-info for both vertex and fragment stages
+	// This lets the pipeline know the shader modules per stage
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.shaderStages.push_back(
+		vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, triangleVertexShader));
+	pipelineBuilder.shaderStages.push_back(
+		vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, triangleFragShader));
+
+	// Vertex input controls how to read vertices from vertex buffers
+	pipelineBuilder.vertexInputInfo = vkinit::VertexInputStateCreateInfo();
+
+	// Input assembly is the configuration for drawing triangle lists, strips, or individual points
+	// We are just going to draw triangle list
+	pipelineBuilder.inputAssembly = vkinit::InputAssemblyCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+	// Build viewport and scissor from the swapchain extents
+	pipelineBuilder.viewport.x = 0.0f;
+	pipelineBuilder.viewport.y = 0.0f;
+	pipelineBuilder.viewport.width = static_cast<float>(windowExtent.width);
+	pipelineBuilder.viewport.height = static_cast<float>(windowExtent.height);
+	pipelineBuilder.viewport.minDepth = 0.0f;
+	pipelineBuilder.viewport.maxDepth = 1.0f;
+
+	pipelineBuilder.scissor.offset = {0, 0};
+	pipelineBuilder.scissor.extent = windowExtent;
+
+	// Configure the rasterizer to draw filled triangles
+	pipelineBuilder.rasterizer = vkinit::RasterizationStateCreateInfo(VK_POLYGON_MODE_FILL);
+
+	// We don't use multisampling, so just run the default one
+	pipelineBuilder.multisampling = vkinit::MultisamplingStateCreateInfo();
+
+	// A single blend attachment with no blending and writing to RGBA
+	pipelineBuilder.colorBlendAttachment = vkinit::ColorBlendAttachmentState();
+
+	// Use the triangle layout we created
+	pipelineBuilder.pipelineLayout = trianglePipelineLayout;
+
+	// Finally, build the pipeline
+	trianglePipeline = pipelineBuilder.BuildPipeline(device, renderPass);
 }
 
 bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule)
@@ -407,11 +467,65 @@ bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outSha
 
 	// Check that the creation goes well
 	VkShaderModule shaderModule;
-	if (vkCreateShaderModule(_device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+	if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
 	{
 		return false;
 	}
 
 	*outShaderModule = shaderModule;
 	return true;
+}
+
+VkPipeline PipelineBuilder::BuildPipeline(const VkDevice device, const VkRenderPass pass)
+{
+	// Make the viewport state from our stored viewport and scissor.
+	// At the moment we won't support multiple viewports and scissors
+	VkPipelineViewportStateCreateInfo viewportState{};
+	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.pNext = nullptr;
+
+	viewportState.viewportCount = 1;
+	viewportState.pViewports = &viewport;
+	viewportState.scissorCount = 1;
+	viewportState.pScissors = &scissor;
+
+	// Setup dummy color blending. We aren't using transparent objects yet
+	// the blending is just "no blend", but we do write to the color attachment
+	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.pNext = nullptr;
+
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.logicOp = VK_LOGIC_OP_COPY;
+	colorBlending.attachmentCount = 1;
+	colorBlending.pAttachments = &colorBlendAttachment;
+
+	// Build the actual pipeline
+	// We now use all of the info structs we have been writing into this one to create the pipeline
+	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineInfo.pNext = nullptr;
+
+	pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+	pipelineInfo.pStages = shaderStages.data();
+	pipelineInfo.pVertexInputState = &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState = &inputAssembly;
+	pipelineInfo.pViewportState = &viewportState;
+	pipelineInfo.pRasterizationState = &rasterizer;
+	pipelineInfo.pMultisampleState = &multisampling;
+	pipelineInfo.pColorBlendState = &colorBlending;
+	pipelineInfo.layout = pipelineLayout;
+	pipelineInfo.renderPass = pass;
+	pipelineInfo.subpass = 0;
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+	// It's easy to error out on create graphics pipeline, so we handle it a bit better than the common VK_CHECK case
+	VkPipeline newPipeline;
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS)
+	{
+		std::cerr << "Failed to create pipeline\n";
+		return VK_NULL_HANDLE;
+	}
+
+	return newPipeline;
 }

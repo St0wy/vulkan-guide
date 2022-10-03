@@ -9,36 +9,39 @@
 class VulkanEngine {
 public:
 
-	bool _isInitialized{ false };
-	int _frameNumber{ 0 };
+	bool isInitialized{ false };
+	int frameNumber{ 0 };
 
-	VkExtent2D _windowExtent{ 1700 , 900 };
+	VkExtent2D windowExtent{ 1700 , 900 };
 
-	struct SDL_Window* _window{ nullptr };
+	struct SDL_Window* window{ nullptr };
 
-	VkInstance _instance{};
-	VkDebugUtilsMessengerEXT _debugMessenger{};
-	VkPhysicalDevice _chosenGpu;
-	VkDevice _device;
-	VkSurfaceKHR _surface;
+	VkInstance instance{};
+	VkDebugUtilsMessengerEXT debugMessenger{};
+	VkPhysicalDevice chosenGpu;
+	VkDevice device;
+	VkSurfaceKHR surface;
 
-	VkSwapchainKHR _swapchain;
-	VkFormat _swapchainImageFormat;
-	std::vector<VkImage> _swapchainImages;
-	std::vector<VkImageView> _swapchainImageViews;
+	VkSwapchainKHR swapchain;
+	VkFormat swapchainImageFormat;
+	std::vector<VkImage> swapchainImages;
+	std::vector<VkImageView> swapchainImageViews;
 
-	VkQueue _graphicsQueue;
-	uint32_t _graphicsQueueFamily;
+	VkQueue graphicsQueue;
+	uint32_t graphicsQueueFamily;
 
-	VkCommandPool _commandPool;
-	VkCommandBuffer _mainCommandBuffer;
+	VkCommandPool commandPool;
+	VkCommandBuffer mainCommandBuffer;
 
-	VkRenderPass _renderPass;
+	VkRenderPass renderPass;
 
-	std::vector<VkFramebuffer> _framebuffers;
+	std::vector<VkFramebuffer> framebuffers;
 
-	VkSemaphore _presentSemaphore, _renderSemaphore;
-	VkFence _renderFence;
+	VkSemaphore presentSemaphore, renderSemaphore;
+	VkFence renderFence;
+
+	VkPipelineLayout trianglePipelineLayout;
+	VkPipeline trianglePipeline;
 
 	// Initializes everything in the engine
 	void Init();
@@ -67,15 +70,15 @@ private:
 class PipelineBuilder
 {
 public:
-	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
-	VkPipelineVertexInputStateCreateInfo _vertexInputInfo;
-	VkPipelineInputAssemblyStateCreateInfo _inputAssembly;
-	VkViewport _viewport;
-	VkRect2D _scissor;
-	VkPipelineRasterizationStateCreateInfo _rasterizer;
-	VkPipelineColorBlendAttachmentState _colorBlendAttachment;
-	VkPipelineMultisampleStateCreateInfo _multisampling;
-	VkPipelineLayout _pipelineLayout;
+	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly;
+	VkViewport viewport;
+	VkRect2D scissor;
+	VkPipelineRasterizationStateCreateInfo rasterizer;
+	VkPipelineColorBlendAttachmentState colorBlendAttachment;
+	VkPipelineMultisampleStateCreateInfo multisampling;
+	VkPipelineLayout pipelineLayout;
 
 	VkPipeline BuildPipeline(VkDevice device, VkRenderPass pass);
 };

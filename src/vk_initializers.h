@@ -5,7 +5,8 @@
 
 #include <vk_types.h>
 
-namespace vkinit {
+namespace vkinit
+{
 	VkCommandPoolCreateInfo CommandPoolCreateInfo(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags = 0);
 	VkCommandBufferAllocateInfo CommandBufferAllocateInfo(
 		VkCommandPool pool,
@@ -24,11 +25,13 @@ namespace vkinit {
 
 	VkPresentInfoKHR PresentInfo();
 
-	VkRenderPassBeginInfo RenderPassBeginInfo(VkRenderPass renderPass, VkExtent2D windowExtent, VkFramebuffer framebuffer);
+	VkRenderPassBeginInfo RenderPassBeginInfo(VkRenderPass renderPass, VkExtent2D windowExtent,
+	                                          VkFramebuffer framebuffer);
 
 	VkShaderModuleCreateInfo ShaderModuleCreateInfo();
 
-	VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule shaderModule);
+	VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
+	                                                              VkShaderModule shaderModule);
 
 	VkPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo();
 
@@ -36,6 +39,9 @@ namespace vkinit {
 
 	VkPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo(VkPolygonMode polygonMode);
 
+	VkPipelineMultisampleStateCreateInfo MultisamplingStateCreateInfo();
 
+	VkPipelineColorBlendAttachmentState ColorBlendAttachmentState();
+
+	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo();
 }
-
