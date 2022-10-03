@@ -115,7 +115,7 @@ void VulkanEngine::Draw()
 	VkClearValue clearValue;
 	const auto floatFrameNumber = static_cast<float>(frameNumber);
 	const float flash = std::abs(std::sin(floatFrameNumber / 120.0f));
-	clearValue.color = {{0.0f, 0.0f, flash, 1.0f}};
+	clearValue.color = { {0.0f, 0.0f, flash, 1.0f} };
 
 	// Start the main render pass.
 	// We will use the clear color from above, and the framebuffer of the index the swapchain gave us
@@ -128,7 +128,15 @@ void VulkanEngine::Draw()
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+	if (_selectedShader == 0)
+	{
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+	}
+	else
+	{
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, redTrianglePipeline);
+	}
+
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 	// Finalize the render pass
@@ -183,17 +191,27 @@ void VulkanEngine::Run()
 		while (SDL_PollEvent(&e) != 0)
 		{
 			//close the window when user alt-f4s or clicks the X button			
-			if (e.type == SDL_QUIT) bQuit = true;
-			if (e.type == SDL_KEYDOWN)
+			if (e.type == SDL_QUIT)
+			{
+				bQuit = true;
+			}
+			else if (e.type == SDL_KEYDOWN)
 			{
 				const Uint8* state = SDL_GetKeyboardState(nullptr);
 				if (state[SDL_SCANCODE_RETURN])
 				{
 					std::cout << "<RETURN> is pressed.\n";
 				}
+
 				if (state[SDL_SCANCODE_RIGHT] && state[SDL_SCANCODE_UP])
 				{
 					std::cout << "Right and Up Keys Pressed.\n";
+				}
+
+				if (e.key.keysym.sym == SDLK_SPACE)
+				{
+					_selectedShader++;
+					_selectedShader %= 2;
 				}
 			}
 		}
@@ -207,10 +225,10 @@ void VulkanEngine::InitVulkan()
 	vkb::InstanceBuilder builder;
 
 	auto instanceRet = builder.set_app_name("Example Vulkan Application")
-	                          .request_validation_layers(true)
-	                          .require_api_version(1, 1, 0)
-	                          .use_default_debug_messenger()
-	                          .build();
+		.request_validation_layers(true)
+		.require_api_version(1, 1, 0)
+		.use_default_debug_messenger()
+		.build();
 
 	const vkb::Instance vkbInstance = instanceRet.value();
 
@@ -225,15 +243,15 @@ void VulkanEngine::InitVulkan()
 
 	// Use VkBootstrap to select a GPU
 	// We want a GPU that can write to the SDL surface and supports Vulkan 1.1
-	vkb::PhysicalDeviceSelector selector{vkbInstance};
+	vkb::PhysicalDeviceSelector selector{ vkbInstance };
 	vkb::PhysicalDevice physicalDevice = selector
-	                                     .set_minimum_version(1, 1)
-	                                     .set_surface(surface)
-	                                     .select()
-	                                     .value();
+		.set_minimum_version(1, 1)
+		.set_surface(surface)
+		.select()
+		.value();
 
 	// Create the final Vulkan device
-	vkb::DeviceBuilder deviceBuilder{physicalDevice};
+	vkb::DeviceBuilder deviceBuilder{ physicalDevice };
 	// ReSharper disable once CppUseStructuredBinding
 	vkb::Device vkbDevice = deviceBuilder.build().value();
 
@@ -248,14 +266,14 @@ void VulkanEngine::InitVulkan()
 
 void VulkanEngine::InitSwapchain()
 {
-	vkb::SwapchainBuilder swapchainBuilder{chosenGpu, device, surface};
+	vkb::SwapchainBuilder swapchainBuilder{ chosenGpu, device, surface };
 
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
-	                              .use_default_format_selection()
-	                              .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-	                              .set_desired_extent(windowExtent.width, windowExtent.height)
-	                              .build()
-	                              .value();
+		.use_default_format_selection()
+		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+		.set_desired_extent(windowExtent.width, windowExtent.height)
+		.build()
+		.value();
 
 	// Store swapchain and its related images
 	swapchain = vkbSwapchain.swapchain;
@@ -367,6 +385,7 @@ void VulkanEngine::InitSyncStructures()
 
 void VulkanEngine::InitPipelines()
 {
+	// Compile colored triangle shaders
 	VkShaderModule triangleFragShader;
 	if (!LoadShaderModule("../../shaders/colored_triangle.frag.spv", &triangleFragShader))
 	{
@@ -379,6 +398,27 @@ void VulkanEngine::InitPipelines()
 
 	VkShaderModule triangleVertexShader;
 	if (!LoadShaderModule("../../shaders/colored_triangle.vert.spv", &triangleVertexShader))
+	{
+		std::cerr << "Error when building the triangle vertex shader module\n";
+	}
+	else
+	{
+		std::cout << "Triangle vertex shader successfully loaded\n";
+	}
+
+	// Compile red triangle shaders
+	VkShaderModule redTriangleFragShader;
+	if (!LoadShaderModule("../../shaders/triangle.frag.spv", &redTriangleFragShader))
+	{
+		std::cerr << "Error when building the triangle fragment shader module\n";
+	}
+	else
+	{
+		std::cout << "Triangle fragment shader successfully loaded\n";
+	}
+
+	VkShaderModule redTriangleVertexShader;
+	if (!LoadShaderModule("../../shaders/triangle.vert.spv", &redTriangleVertexShader))
 	{
 		std::cerr << "Error when building the triangle vertex shader module\n";
 	}
@@ -416,7 +456,7 @@ void VulkanEngine::InitPipelines()
 	pipelineBuilder.viewport.minDepth = 0.0f;
 	pipelineBuilder.viewport.maxDepth = 1.0f;
 
-	pipelineBuilder.scissor.offset = {0, 0};
+	pipelineBuilder.scissor.offset = { 0, 0 };
 	pipelineBuilder.scissor.extent = windowExtent;
 
 	// Configure the rasterizer to draw filled triangles
@@ -433,6 +473,17 @@ void VulkanEngine::InitPipelines()
 
 	// Finally, build the pipeline
 	trianglePipeline = pipelineBuilder.BuildPipeline(device, renderPass);
+
+	// Clear the shader stages for the builder
+	pipelineBuilder.shaderStages.clear();
+
+	// Add the other shaders
+	pipelineBuilder.shaderStages.push_back(
+		vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, redTriangleVertexShader));
+	pipelineBuilder.shaderStages.push_back(
+		vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, redTriangleFragShader));
+
+	redTrianglePipeline = pipelineBuilder.BuildPipeline(device, renderPass);
 }
 
 bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule)

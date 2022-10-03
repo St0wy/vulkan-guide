@@ -41,6 +41,8 @@ public:
 	VkFence renderFence;
 
 	VkPipelineLayout trianglePipelineLayout;
+
+	VkPipeline redTrianglePipeline;
 	VkPipeline trianglePipeline;
 
 	// Initializes everything in the engine
@@ -56,6 +58,8 @@ public:
 	void Run();
 
 private:
+	int _selectedShader{ 0 };
+
 	void InitVulkan();
 	void InitSwapchain();
 	void InitCommands();
