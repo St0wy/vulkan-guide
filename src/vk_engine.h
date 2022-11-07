@@ -6,7 +6,9 @@
 #include <deque>
 #include <functional>
 #include <vector>
+#include <unordered_map>
 
+#include "camera.h"
 #include "vk_mesh.h"
 #include "vk_types.h"
 
@@ -17,6 +19,19 @@ struct DeletionQueue
 	void PushFunction(std::function<void()>&& function);
 
 	void Flush();
+};
+
+struct Material
+{
+	VkPipeline pipeline;
+	VkPipelineLayout pipelineLayout;
+};
+
+struct RenderObject
+{
+	Mesh* mesh;
+	Material* material;
+	glm::mat4 transformMatrix;
 };
 
 class VulkanEngine
@@ -53,19 +68,15 @@ public:
 	VkSemaphore presentSemaphore, renderSemaphore;
 	VkFence renderFence;
 
-	//VkPipelineLayout trianglePipelineLayout;
-	VkPipelineLayout meshPipelineLayout;
-
-	VkPipeline meshPipeline;
-	Mesh triangleMesh;
-
 	VmaAllocator allocator;
-
-	Mesh monkeyMesh;
 
 	VkImageView depthImageView;
 	AllocatedImage depthImage;
 	VkFormat depthFormat;
+
+	std::vector<RenderObject> renderables;
+	std::unordered_map<std::string, Material> materials;
+	std::unordered_map<std::string, Mesh> meshes;
 
 	// Initializes everything in the engine
 	void Init();
@@ -79,9 +90,21 @@ public:
 	// Run main loop
 	void Run();
 
+	bool Update();
+
+	Material* CreateMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+
+	Material* GetMaterial(const std::string& name);
+
+	Mesh* GetMesh(const std::string& name);
+
+	void DrawObjects(VkCommandBuffer commandBuffer, RenderObject* first, int count);
+
 private:
 	int _selectedShader{ 0 };
 	DeletionQueue _mainDeletionQueue;
+	Camera _camera{ { 0.0f, 6.0f, 10.0f }, 1700.0f / 900.0f };
+	bool _hasFocus = true;
 
 	void InitVulkan();
 	void InitSwapchain();
@@ -90,6 +113,7 @@ private:
 	void InitFramebuffers();
 	void InitSyncStructures();
 	void InitPipelines();
+	void InitScene();
 
 	bool LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 

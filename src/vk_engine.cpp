@@ -64,6 +64,8 @@ void VulkanEngine::Init()
 		windowFlags
 	);
 
+	SDL_SetRelativeMouseMode(SDL_TRUE);
+
 	InitVulkan();
 	InitSwapchain();
 	InitCommands();
@@ -73,6 +75,8 @@ void VulkanEngine::Init()
 	InitPipelines();
 
 	LoadMeshes();
+
+	InitScene();
 
 	//everything went fine
 	isInitialized = true;
@@ -124,7 +128,7 @@ void VulkanEngine::Draw()
 	const float flash = std::abs(std::sin(floatFrameNumber / 120.0f));
 	clearValue.color = { {0.0f, 0.0f, flash, 1.0f} };
 
-	VkClearValue depthClear;
+	VkClearValue depthClear{};
 	depthClear.depthStencil.depth = 1.0f;
 
 	// Start the main render pass.
@@ -134,44 +138,14 @@ void VulkanEngine::Draw()
 		windowExtent,
 		framebuffers[swapchainImageIndex]);
 
-	renderPassBeginInfo.clearValueCount = 2;
-
 	// Connect clear values
-	VkClearValue clearValues[2] = { clearValue, depthClear };
+	const VkClearValue clearValues[2] = { clearValue, depthClear };
 	renderPassBeginInfo.clearValueCount = 2;
 	renderPassBeginInfo.pClearValues = &clearValues[0];
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);
-
-	// Bind the mesh vertex buffer with offset 0
-	constexpr VkDeviceSize offset = 0;
-	//vkCmdBindVertexBuffers(commandBuffer, 0, 1, &triangleMesh.vertexBuffer.buffer, &offset);
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &monkeyMesh.vertexBuffer.buffer, &offset);
-
-	// Make a model view matrix for rendering the object
-	// Camera position
-	glm::vec3 camPos = { 0.0f, 0.0f, -2.0f };
-
-	glm::mat4 view = translate(glm::mat4(1.0f), camPos);
-	glm::mat4 projection = glm::perspective(glm::radians(70.0f), 1700.0f / 900.0f, 0.1f, 200.0f);
-	projection[1][1] *= -1;
-	float angle = glm::radians(static_cast<float>(frameNumber) * 0.4f);
-	glm::mat4 model = rotate(glm::mat4{ 1.0f }, angle, glm::vec3(0, 1, 0));
-
-	// Compute final mesh matrix
-	glm::mat4 meshMatrix = projection * view * model;
-
-	MeshPushConstants constants{};
-	constants.renderMatrix = meshMatrix;
-
-	// Upload the matrix to the GPU via push constants
-	vkCmdPushConstants(commandBuffer, meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
-
-	// We can now draw the mesh
-	//vkCmdDraw(commandBuffer, static_cast<uint32_t>(triangleMesh.vertices.size()), 1, 0, 0);
-	vkCmdDraw(commandBuffer, static_cast<uint32_t>(monkeyMesh.vertices.size()), 1, 0, 0);
+	DrawObjects(commandBuffer, renderables.data(), static_cast<int>(renderables.size()));
 
 	// Finalize the render pass
 	vkCmdEndRenderPass(commandBuffer);
@@ -249,9 +223,144 @@ void VulkanEngine::Run()
 					_selectedShader %= 2;
 				}
 			}
+			else if (e.type == SDL_WINDOWEVENT_FOCUS_GAINED)
+			{
+				_hasFocus = true;
+			}
+			else if (e.type == SDL_WINDOWEVENT_FOCUS_LOST)
+			{
+				_hasFocus = false;
+			}
+			else if (e.type == SDL_MOUSEMOTION)
+			{
+				const auto xMotion = static_cast<float>(e.motion.xrel);
+				const auto yMotion = static_cast<float>(e.motion.yrel);
+				_camera.SetYaw(_camera.Yaw() + -glm::radians(xMotion) * 0.3f);
+				_camera.SetPitch(_camera.Pitch() + -glm::radians(yMotion) * 0.3f);
+			}
+		}
+
+		if (_hasFocus)
+		{
+			const bool shouldQuit = Update();
+			if (shouldQuit)
+			{
+				bQuit = true;
+			}
 		}
 
 		Draw();
+	}
+}
+
+bool VulkanEngine::Update()
+{
+	const Uint8* keyboardState = SDL_GetKeyboardState(nullptr);
+
+	if (keyboardState[SDL_SCANCODE_ESCAPE])
+	{
+		return true;
+	}
+
+	constexpr float camSpeed = 0.1f;
+	if (keyboardState[SDL_SCANCODE_W])
+	{
+		_camera.position += _camera.Front() * camSpeed;
+	}
+	if (keyboardState[SDL_SCANCODE_A])
+	{
+		_camera.position += _camera.Right() * -camSpeed;
+	}
+	if (keyboardState[SDL_SCANCODE_S])
+	{
+		_camera.position += _camera.Front() * -camSpeed;
+	}
+	if (keyboardState[SDL_SCANCODE_D])
+	{
+		_camera.position += _camera.Right() * camSpeed;
+	}
+	if (keyboardState[SDL_SCANCODE_LSHIFT])
+	{
+		_camera.position += glm::vec3{ 0, -camSpeed, 0 };
+	}
+	if (keyboardState[SDL_SCANCODE_SPACE])
+	{
+		_camera.position += glm::vec3{ 0, camSpeed, 0 };
+	}
+
+	return false;
+}
+
+Material* VulkanEngine::CreateMaterial(const VkPipeline pipeline, const VkPipelineLayout layout,
+	const std::string& name)
+{
+	Material material{};
+	material.pipeline = pipeline;
+	material.pipelineLayout = layout;
+	materials[name] = material;
+	return &materials[name];
+}
+
+Material* VulkanEngine::GetMaterial(const std::string& name)
+{
+	const auto it = materials.find(name);
+
+	if (it == materials.end()) return nullptr;
+
+	return &(*it).second;
+}
+
+Mesh* VulkanEngine::GetMesh(const std::string& name)
+{
+	const auto it = meshes.find(name);
+
+	if (it == meshes.end()) return nullptr;
+
+	return &(*it).second;
+}
+
+void VulkanEngine::DrawObjects(const VkCommandBuffer commandBuffer, RenderObject* first, const int count)
+{
+	const glm::mat4 view = _camera.GetViewMatrix();
+
+	const glm::mat4 projection = _camera.GetProjectionMatrix();
+
+	const Mesh* lastMesh = nullptr;
+	const Material* lastMaterial = nullptr;
+	for (int i = 0; i < count; i++)
+	{
+		const auto& [mesh, material, transformMatrix] = first[i];
+
+		if (!mesh || !material) continue;
+
+		// Only bind the pipeline if it doesn't match with the already bound one
+		if (material != lastMaterial)
+		{
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, material->pipeline);
+			lastMaterial = material;
+		}
+
+		glm::mat4 model = transformMatrix;
+
+		// Final render matrix, that we are computing on the cpu
+		const glm::mat4 meshMatrix = projection * view * model;
+
+		MeshPushConstants constants{};
+		constants.renderMatrix = meshMatrix;
+
+		// Upload the mesh to the GPU via push constants
+		vkCmdPushConstants(commandBuffer, material->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+
+		// Only bind the mesh if it's a different one from last bind
+		if (mesh != lastMesh)
+		{
+			VkDeviceSize offset = 0;
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &mesh->vertexBuffer.buffer, &offset);
+			lastMesh = mesh;
+		}
+
+		// We can now draw
+		vkCmdDraw(commandBuffer, static_cast<uint32_t>(mesh->vertices.size()), 1, 0, 0);
 	}
 }
 
@@ -344,7 +453,8 @@ void VulkanEngine::InitSwapchain()
 	depthFormat = VK_FORMAT_D32_SFLOAT;
 
 	// The depth image will be an image with the format we selected and Depth Attachment usage flag
-	VkImageCreateInfo depthImageInfo = vkinit::ImageCreateInfo(depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depthImageExtent);
+	VkImageCreateInfo depthImageInfo = vkinit::ImageCreateInfo(depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		depthImageExtent);
 
 	// For the depth image, we want to allocate it from GPU local memory
 	VmaAllocationCreateInfo depthImageAllocInfo{};
@@ -352,10 +462,12 @@ void VulkanEngine::InitSwapchain()
 	depthImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// Allocate and create the image
-	vmaCreateImage(allocator, &depthImageInfo, &depthImageAllocInfo, &depthImage.image, &depthImage.allocation, nullptr);
+	vmaCreateImage(allocator, &depthImageInfo, &depthImageAllocInfo, &depthImage.image, &depthImage.allocation,
+		nullptr);
 
 	// Build an image-view for the depth image to use for rendering
-	VkImageViewCreateInfo depthViewInfo = vkinit::ImageViewCreateInfo(depthFormat, depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VkImageViewCreateInfo depthViewInfo = vkinit::ImageViewCreateInfo(depthFormat, depthImage.image,
+		VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	VK_CHECK(vkCreateImageView(device, &depthViewInfo, nullptr, &depthImageView));
 
@@ -467,9 +579,11 @@ void VulkanEngine::InitDefaultRenderpass()
 	VkSubpassDependency depthDependency = {};
 	depthDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	depthDependency.dstSubpass = 0;
-	depthDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	depthDependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+		VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 	depthDependency.srcAccessMask = 0;
-	depthDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	depthDependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+		VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 	depthDependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 	VkSubpassDependency dependencies[2] = { dependency, depthDependency };
@@ -499,7 +613,7 @@ void VulkanEngine::InitFramebuffers()
 
 	for (std::size_t i = 0; i < swapchainImageCount; ++i)
 	{
-		VkImageView attachments[2];
+		VkImageView attachments[2]{};
 		attachments[0] = swapchainImageViews[i];
 		attachments[1] = depthImageView;
 		framebufferInfo.attachmentCount = 2;
@@ -615,7 +729,7 @@ void VulkanEngine::InitPipelines()
 	// Setup push constants
 	VkPushConstantRange pushConstant{};
 
-	// This push constant starts at the begining
+	// This push constant starts at the beginning
 	pushConstant.offset = 0;
 
 	// This push constant takes up the size of the MeshPushConstants struct
@@ -627,22 +741,50 @@ void VulkanEngine::InitPipelines()
 	meshPipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 	meshPipelineLayoutInfo.pushConstantRangeCount = 1;
 
+	VkPipelineLayout meshPipelineLayout;
 	VK_CHECK(vkCreatePipelineLayout(device, &meshPipelineLayoutInfo, nullptr, &meshPipelineLayout));
 
 	pipelineBuilder.pipelineLayout = meshPipelineLayout;
 
-	meshPipeline = pipelineBuilder.BuildPipeline(device, renderPass);
+	VkPipeline meshPipeline = pipelineBuilder.BuildPipeline(device, renderPass);
+
+	CreateMaterial(meshPipeline, meshPipelineLayout, "defaultmesh");
 
 	vkDestroyShaderModule(device, meshVertexShader, nullptr);
 	vkDestroyShaderModule(device, triangleFragShader, nullptr);
 
-	_mainDeletionQueue.PushFunction([this]()
+	_mainDeletionQueue.PushFunction([=, this]()
 	{
 		// Destroy the pipeline we have created
 		vkDestroyPipeline(device, meshPipeline, nullptr);
 
 		vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
 	});
+}
+
+void VulkanEngine::InitScene()
+{
+	RenderObject monkey{};
+	monkey.mesh = GetMesh("monkey");
+	monkey.material = GetMaterial("defaultmesh");
+	monkey.transformMatrix = glm::mat4{ 1.0 };
+
+	renderables.push_back(monkey);
+
+	for (int x = -20; x <= 20; ++x)
+	{
+		for (int y = -20; y <= 20; ++y)
+		{
+			RenderObject triangle{};
+			triangle.mesh = GetMesh("triangle");
+			triangle.material = GetMaterial("defaultmesh");
+			glm::mat4 translation = translate(glm::mat4{ 1.0 }, glm::vec3(x, 0, y));
+			glm::mat4 scale = glm::scale(glm::mat4{ 1.0 }, glm::vec3(0.2, 0.2, 0.2));
+			triangle.transformMatrix = translation * scale;
+
+			renderables.push_back(triangle);
+		}
+	}
 }
 
 bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule)
@@ -688,6 +830,7 @@ bool VulkanEngine::LoadShaderModule(const char* filePath, VkShaderModule* outSha
 
 void VulkanEngine::LoadMeshes()
 {
+	Mesh triangleMesh;
 	triangleMesh.vertices.resize(3);
 
 	triangleMesh.vertices[0].position = { 1.f, 1.f, 0.0f };
@@ -700,10 +843,14 @@ void VulkanEngine::LoadMeshes()
 	triangleMesh.vertices[2].color = { 0.f, 1.f, 0.0f }; //pure green
 
 	// Load the monkey
+	Mesh monkeyMesh;
 	monkeyMesh.LoadFromObj("../../assets/monkey_smooth.obj");
 
 	UploadMesh(triangleMesh);
 	UploadMesh(monkeyMesh);
+
+	meshes["monkey"] = monkeyMesh;
+	meshes["triangle"] = triangleMesh;
 }
 
 void VulkanEngine::UploadMesh(Mesh& mesh)

@@ -9,6 +9,8 @@ add_executable(vulkan_guide
     vk_initializers.h
     vk_mesh.h
     vk_mesh.cpp
+	camera.h
+	camera.cpp
 )
 
 

@@ -269,8 +269,7 @@ VkImageViewCreateInfo vkinit::ImageViewCreateInfo(const VkFormat format, const V
 	return info;
 }
 
-VkPipelineDepthStencilStateCreateInfo vkinit::DepthStencilStateCreateInfo(bool depthTest, bool depthWrite,
-	VkCompareOp compareOp)
+VkPipelineDepthStencilStateCreateInfo vkinit::DepthStencilStateCreateInfo(const bool depthTest, const bool depthWrite, const VkCompareOp compareOp)
 {
 	VkPipelineDepthStencilStateCreateInfo info{};
 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
