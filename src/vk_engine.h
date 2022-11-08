@@ -12,6 +12,8 @@
 #include "vk_mesh.h"
 #include "vk_types.h"
 
+constexpr std::size_t FRAME_OVERLAP = 2;
+
 struct DeletionQueue
 {
 	std::deque<std::function<void()>> deletors;
@@ -32,6 +34,25 @@ struct RenderObject
 	Mesh* mesh;
 	Material* material;
 	glm::mat4 transformMatrix;
+};
+
+struct GpuCameraData
+{
+	glm::mat4 view;
+	glm::mat4 projection;
+	glm::mat4 viewProjection;
+};
+
+struct FrameData
+{
+	VkSemaphore presentSemaphore, renderSemaphore;
+	VkFence renderFence;
+
+	VkCommandPool commandPool;
+	VkCommandBuffer mainCommandBuffer;
+
+	AllocatedBuffer cameraBuffer;
+	VkDescriptorSet globalDescriptor;
 };
 
 class VulkanEngine
@@ -58,16 +79,10 @@ public:
 	VkQueue graphicsQueue;
 	uint32_t graphicsQueueFamily;
 
-	VkCommandPool commandPool;
-	VkCommandBuffer mainCommandBuffer;
-
 	VkRenderPass renderPass;
 
 	std::vector<VkFramebuffer> framebuffers;
-
-	VkSemaphore presentSemaphore, renderSemaphore;
-	VkFence renderFence;
-
+	
 	VmaAllocator allocator;
 
 	VkImageView depthImageView;
@@ -77,6 +92,8 @@ public:
 	std::vector<RenderObject> renderables;
 	std::unordered_map<std::string, Material> materials;
 	std::unordered_map<std::string, Mesh> meshes;
+
+	FrameData frames[FRAME_OVERLAP];
 
 	// Initializes everything in the engine
 	void Init();
@@ -100,6 +117,10 @@ public:
 
 	void DrawObjects(VkCommandBuffer commandBuffer, RenderObject* first, int count);
 
+	FrameData& GetCurrentFrame();
+
+	[[nodiscard]] AllocatedBuffer CreateBuffer(std::size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+
 private:
 	int _selectedShader{ 0 };
 	DeletionQueue _mainDeletionQueue;
@@ -114,6 +135,7 @@ private:
 	void InitSyncStructures();
 	void InitPipelines();
 	void InitScene();
+	void InitDescriptors();
 
 	bool LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 
