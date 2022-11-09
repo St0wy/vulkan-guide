@@ -5,9 +5,9 @@
 
 #include <deque>
 #include <functional>
-#include <vector>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "camera.h"
 #include "vk_mesh.h"
@@ -22,38 +22,6 @@ struct DeletionQueue
 	void PushFunction(std::function<void()>&& function);
 
 	void Flush();
-};
-
-struct Material
-{
-	VkPipeline pipeline;
-	VkPipelineLayout pipelineLayout;
-};
-
-struct RenderObject
-{
-	Mesh* mesh;
-	Material* material;
-	glm::mat4 transformMatrix;
-};
-
-struct GpuCameraData
-{
-	glm::mat4 view;
-	glm::mat4 projection;
-	glm::mat4 viewProjection;
-};
-
-struct FrameData
-{
-	VkSemaphore presentSemaphore, renderSemaphore;
-	VkFence renderFence;
-
-	VkCommandPool commandPool;
-	VkCommandBuffer mainCommandBuffer;
-
-	AllocatedBuffer cameraBuffer;
-	VkDescriptorSet globalDescriptor;
 };
 
 class VulkanEngine
@@ -99,6 +67,11 @@ public:
 	VkDescriptorSetLayout globalSetLayout;
 	VkDescriptorPool descriptorPool;
 
+	VkPhysicalDeviceProperties gpuProperties;
+
+	GpuSceneData sceneParameters;
+	AllocatedBuffer sceneParameterBuffer;
+
 	// Initializes everything in the engine
 	void Init();
 
@@ -125,6 +98,8 @@ public:
 
 	[[nodiscard]] AllocatedBuffer CreateBuffer(std::size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
 
+	[[nodiscard]] std::size_t PadUniformBufferSize(std::size_t originalSize) const;
+
 private:
 	int _selectedShader{ 0 };
 	DeletionQueue _mainDeletionQueue;
@@ -141,7 +116,7 @@ private:
 	void InitScene();
 	void InitDescriptors();
 
-	bool LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
+	bool LoadShaderModule(const char* filePath, VkShaderModule* outShaderModule) const;
 
 	void LoadMeshes();
 	void UploadMesh(Mesh& mesh);

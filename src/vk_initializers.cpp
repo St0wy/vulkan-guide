@@ -284,3 +284,32 @@ VkPipelineDepthStencilStateCreateInfo vkinit::DepthStencilStateCreateInfo(const 
 
 	return info;
 }
+
+VkDescriptorSetLayoutBinding vkinit::DescriptorSetLayoutBinding(const VkDescriptorType type, const VkShaderStageFlags stageFlags,
+	const std::uint32_t binding)
+{
+	VkDescriptorSetLayoutBinding setBind{};
+	setBind.binding = binding;
+	setBind.descriptorCount = 1;
+	setBind.descriptorType = type;
+	setBind.pImmutableSamplers = nullptr;
+	setBind.stageFlags = stageFlags;
+
+	return setBind;
+}
+
+VkWriteDescriptorSet vkinit::WriteDescriptorBuffer(const VkDescriptorType type, const VkDescriptorSet dstSet,
+	const VkDescriptorBufferInfo* bufferInfo, const std::uint32_t binding)
+{
+	VkWriteDescriptorSet write{};
+	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write.pNext = nullptr;
+
+	write.dstBinding = binding;
+	write.dstSet = dstSet;
+	write.descriptorCount = 1;
+	write.descriptorType = type;
+	write.pBufferInfo = bufferInfo;
+
+	return write;
+}
