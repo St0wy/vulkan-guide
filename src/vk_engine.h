@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 #include <unordered_map>
+#include <string>
 
 #include "camera.h"
 #include "vk_mesh.h"
@@ -94,6 +95,9 @@ public:
 	std::unordered_map<std::string, Mesh> meshes;
 
 	FrameData frames[FRAME_OVERLAP];
+
+	VkDescriptorSetLayout globalSetLayout;
+	VkDescriptorPool descriptorPool;
 
 	// Initializes everything in the engine
 	void Init();
