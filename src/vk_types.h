@@ -51,6 +51,9 @@ struct FrameData
 
 	AllocatedBuffer cameraBuffer;
 	VkDescriptorSet globalDescriptor;
+
+	AllocatedBuffer objectBuffer;
+	VkDescriptorSet objectDescriptor;
 };
 
 struct GpuSceneData
@@ -63,4 +66,9 @@ struct GpuSceneData
 	// w for sun power
 	glm::vec4 sunlightDirection;
 	glm::vec4 sunlightColor;
+};
+
+struct GpuObjectData
+{
+	glm::mat4 modelMatrix;
 };

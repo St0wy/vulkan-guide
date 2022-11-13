@@ -65,6 +65,7 @@ public:
 	FrameData frames[FRAME_OVERLAP];
 
 	VkDescriptorSetLayout globalSetLayout;
+	VkDescriptorSetLayout objectSetLayout;
 	VkDescriptorPool descriptorPool;
 
 	VkPhysicalDeviceProperties gpuProperties;
