@@ -27,6 +27,9 @@ struct DeletionQueue
 class VulkanEngine
 {
 public:
+	static constexpr float LOOK_ROTATION_SPEED = 5.0f;
+	static constexpr float MOVE_SPEED = 5.0f;
+
 	bool isInitialized{ false };
 	int frameNumber{ 0 };
 
@@ -85,7 +88,7 @@ public:
 	// Run main loop
 	void Run();
 
-	bool Update();
+	void Update(float deltaTime);
 
 	Material* CreateMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
 

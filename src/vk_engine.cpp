@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <ranges>
+#include <chrono>
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <VkBootstrap.h>
@@ -192,12 +193,18 @@ void VulkanEngine::Draw()
 
 void VulkanEngine::Run()
 {
+	using Clock = std::chrono::system_clock;
+	using Sec = std::chrono::duration<float>;
+
 	SDL_Event e;
 	bool bQuit = false;
 
+	auto startTime = Clock::now();
 	//main loop
 	while (!bQuit)
 	{
+		Sec deltaTime = startTime - Clock::now();
+		startTime = Clock::now();
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0)
 		{
@@ -224,6 +231,11 @@ void VulkanEngine::Run()
 					_selectedShader++;
 					_selectedShader %= 2;
 				}
+
+				if (e.key.keysym.sym == SDLK_ESCAPE)
+				{
+					bQuit = true;
+				}
 			}
 			else if (e.type == SDL_WINDOWEVENT_FOCUS_GAINED)
 			{
@@ -235,62 +247,50 @@ void VulkanEngine::Run()
 			}
 			else if (e.type == SDL_MOUSEMOTION)
 			{
-				const auto xMotion = static_cast<float>(e.motion.xrel);
-				const auto yMotion = static_cast<float>(e.motion.yrel);
-				_camera.SetYaw(_camera.Yaw() + -glm::radians(xMotion) * 0.3f);
-				_camera.SetPitch(_camera.Pitch() + -glm::radians(yMotion) * 0.3f);
+				const auto xMotion = static_cast<float>(e.motion.xrel) * deltaTime.count();
+				const auto yMotion = static_cast<float>(e.motion.yrel) * deltaTime.count();
+				_camera.SetYaw(_camera.Yaw() + glm::radians(xMotion) * LOOK_ROTATION_SPEED);
+				_camera.SetPitch(_camera.Pitch() + glm::radians(yMotion) * LOOK_ROTATION_SPEED);
 			}
 		}
 
 		if (_hasFocus)
 		{
-			const bool shouldQuit = Update();
-			if (shouldQuit)
-			{
-				bQuit = true;
-			}
+			Update(deltaTime.count());
 		}
 
 		Draw();
 	}
 }
 
-bool VulkanEngine::Update()
+void VulkanEngine::Update(const float deltaTime)
 {
 	const Uint8* keyboardState = SDL_GetKeyboardState(nullptr);
 
-	if (keyboardState[SDL_SCANCODE_ESCAPE])
-	{
-		return true;
-	}
-
-	constexpr float camSpeed = 0.1f;
 	if (keyboardState[SDL_SCANCODE_W])
 	{
-		_camera.position += _camera.Front() * camSpeed;
+		_camera.position += _camera.Front() * -MOVE_SPEED * deltaTime;
 	}
 	if (keyboardState[SDL_SCANCODE_A])
 	{
-		_camera.position += _camera.Right() * -camSpeed;
+		_camera.position += _camera.Right() * MOVE_SPEED * deltaTime;
 	}
 	if (keyboardState[SDL_SCANCODE_S])
 	{
-		_camera.position += _camera.Front() * -camSpeed;
+		_camera.position += _camera.Front() * MOVE_SPEED * deltaTime;
 	}
 	if (keyboardState[SDL_SCANCODE_D])
 	{
-		_camera.position += _camera.Right() * camSpeed;
+		_camera.position += _camera.Right() * -MOVE_SPEED * deltaTime;
 	}
 	if (keyboardState[SDL_SCANCODE_LSHIFT])
 	{
-		_camera.position += glm::vec3{ 0, -camSpeed, 0 };
+		_camera.position += (glm::vec3{ 0, MOVE_SPEED * deltaTime, 0 });
 	}
 	if (keyboardState[SDL_SCANCODE_SPACE])
 	{
-		_camera.position += glm::vec3{ 0, camSpeed, 0 };
+		_camera.position += glm::vec3{ 0, -MOVE_SPEED * deltaTime, 0 };
 	}
-
-	return false;
 }
 
 Material* VulkanEngine::CreateMaterial(const VkPipeline pipeline, const VkPipelineLayout layout,

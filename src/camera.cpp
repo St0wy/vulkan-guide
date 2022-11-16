@@ -11,7 +11,9 @@ Camera::Camera(const glm::vec3 position, const float aspectRatio)
 	_pitch(0),
 	_yaw(-glm::pi<float>() / 2.0f),
 	_fov(glm::pi<float>() / 2.0f)
-{}
+{
+	UpdateVectors();
+}
 
 void Camera::SetPitch(const float pitch)
 {
